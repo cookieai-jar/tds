@@ -1,4 +1,4 @@
-module github.com/thda/tds
+module github.com/cookieai-jar/tds
 
 require (
 	github.com/chzyer/logex v1.1.10 // indirect
