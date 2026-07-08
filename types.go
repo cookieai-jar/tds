@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cookieai-jar/tds/binary"
+	"github.com/thda/tds/binary"
 	"golang.org/x/text/encoding/unicode"
 
 	"errors"
