@@ -18,7 +18,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/cookieai-jar/tds"
+	"github.com/thda/tds"
 	"github.com/xo/tblfmt"
 
 	"github.com/chzyer/readline"

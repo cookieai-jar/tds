@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cookieai-jar/tds/binary"
+	"github.com/thda/tds/binary"
 
 	"errors"
 )
