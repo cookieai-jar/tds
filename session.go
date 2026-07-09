@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
 	"database/sql/driver"
 	"encoding/asn1"
@@ -159,12 +160,77 @@ func newSession(prm connParams) (s *session, err error) {
 // dial connects to the target host and returns a writer.
 func dial(prm connParams) (io.ReadWriteCloser, error) {
 	if prm.ssl == "on" {
+		cfg, err := tlsConfigForParams(prm)
+		if err != nil {
+			return nil, err
+		}
 		return tls.DialWithDialer(&net.Dialer{Timeout: time.Duration(prm.loginTimeout) * time.Second},
-			"tcp", prm.host, &tls.Config{InsecureSkipVerify: true})
+			"tcp", prm.host, cfg)
 	}
 
 	return net.DialTimeout("tcp", prm.host,
 		time.Duration(prm.loginTimeout)*time.Second)
+}
+
+// tlsConfigForParams builds the TLS configuration for an SSL connection.
+//
+// Behaviour depends on the sslrootcert / sslservername DSN parameters:
+//   - no sslrootcert: legacy behaviour is retained — TLS is used opportunistically
+//     without verifying the server certificate (InsecureSkipVerify). This keeps
+//     existing "ssl=on" connections working unchanged.
+//   - sslrootcert set, sslservername set: full verification — the server certificate
+//     chain is verified against the CA and the hostname must match sslservername.
+//   - sslrootcert set, sslservername empty: chain-only verification — the chain is
+//     verified against the CA but the hostname check is skipped (verify-ca). Go has
+//     no built-in flag for this, so default verification is disabled and the chain is
+//     re-verified in VerifyPeerCertificate.
+func tlsConfigForParams(prm connParams) (*tls.Config, error) {
+	if prm.sslCACert == "" {
+		//nolint:gosec // G402: no CA supplied preserves the driver's historical
+		// opportunistic-TLS behaviour; callers opt into verification via sslrootcert.
+		return &tls.Config{InsecureSkipVerify: true}, nil
+	}
+
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM([]byte(prm.sslCACert)) {
+		return nil, errors.New("tds: failed to parse sslrootcert CA certificate")
+	}
+
+	if prm.sslServerName != "" {
+		return &tls.Config{
+			RootCAs:    pool,
+			ServerName: prm.sslServerName,
+			MinVersion: tls.VersionTLS12,
+		}, nil
+	}
+
+	cfg := &tls.Config{
+		RootCAs:    pool,
+		MinVersion: tls.VersionTLS12,
+		//nolint:gosec // G402: the chain is still verified below in
+		// VerifyPeerCertificate; only the hostname check is intentionally skipped.
+		InsecureSkipVerify: true,
+	}
+	cfg.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+		if len(rawCerts) == 0 {
+			return errors.New("tds: server presented no certificate")
+		}
+		certs := make([]*x509.Certificate, 0, len(rawCerts))
+		for _, raw := range rawCerts {
+			cert, err := x509.ParseCertificate(raw)
+			if err != nil {
+				return err
+			}
+			certs = append(certs, cert)
+		}
+		opts := x509.VerifyOptions{Roots: pool, Intermediates: x509.NewCertPool()}
+		for _, cert := range certs[1:] {
+			opts.Intermediates.AddCert(cert)
+		}
+		_, err := certs[0].Verify(opts)
+		return err
+	}
+	return cfg, nil
 }
 
 // login sends the login packets. Login and capabilities required.

@@ -31,6 +31,15 @@ type connParams struct {
 	pid          string
 	textSize     int
 	ssl          string
+	// sslCACert is a PEM-encoded CA certificate (or bundle). When set on an SSL
+	// connection, the server's certificate chain is verified against it instead of
+	// connecting insecurely. Empty keeps the legacy no-verification behaviour.
+	sslCACert string
+	// sslServerName is the expected server name used for hostname verification of
+	// the server certificate. When set (together with sslCACert) the chain AND the
+	// hostname are verified (verify-full). When empty but sslCACert is set, only the
+	// chain is verified and the hostname check is skipped (verify-ca).
+	sslServerName string
 	// yes: mandatory password encryption.
 	// no: never encrypt password.
 	// try: try encryption, fallback to non encrypted password.
@@ -93,6 +102,11 @@ func parseDSN(dsn string) (prm connParams, err error) {
 	if values.Get("ssl") == "on" {
 		prm.ssl = "on"
 	}
+
+	// Optional TLS server-certificate verification. sslrootcert carries a PEM CA
+	// certificate; sslservername, when set, additionally enables hostname verification.
+	prm.sslCACert = values.Get("sslrootcert")
+	prm.sslServerName = values.Get("sslservername")
 
 	switch values.Get("charset") {
 	case "none":
