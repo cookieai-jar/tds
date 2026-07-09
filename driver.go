@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -40,6 +41,12 @@ type connParams struct {
 	// hostname are verified (verify-full). When empty but sslCACert is set, only the
 	// chain is verified and the hostname check is skipped (verify-ca).
 	sslServerName string
+	// interpolateParams, when true, makes the driver substitute placeholder ("?")
+	// parameters as escaped SQL literals client-side and send the statement as a plain
+	// language request, instead of using the ASE dynamic-SQL prepared-statement protocol.
+	// This is required for servers that do not implement that protocol (e.g. SAP IQ /
+	// SQL Anywhere), where the prepared-statement path hangs.
+	interpolateParams bool
 	// yes: mandatory password encryption.
 	// no: never encrypt password.
 	// try: try encryption, fallback to non encrypted password.
@@ -107,6 +114,12 @@ func parseDSN(dsn string) (prm connParams, err error) {
 	// certificate; sslservername, when set, additionally enables hostname verification.
 	prm.sslCACert = values.Get("sslrootcert")
 	prm.sslServerName = values.Get("sslservername")
+
+	// Opt-in client-side parameter interpolation (see connParams.interpolateParams).
+	switch strings.ToLower(values.Get("interpolateParams")) {
+	case "true", "1", "on", "yes":
+		prm.interpolateParams = true
+	}
 
 	switch values.Get("charset") {
 	case "none":

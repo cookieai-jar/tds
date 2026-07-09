@@ -54,6 +54,10 @@ type session struct {
 	writeTimeout int
 	loginTimeout int
 
+	// interpolateParams substitutes "?" placeholders client-side and sends a language
+	// request instead of using the (unsupported-on-SQL-Anywhere) dynamic-SQL path.
+	interpolateParams bool
+
 	// tds env
 	database   string
 	charset    string
@@ -99,7 +103,8 @@ func newSession(prm connParams) (s *session, err error) {
 		returnStatus: returnStatus{msg: newMsg(returnStatusToken)},
 		IsError:      isError, packetSize: prm.packetSize,
 		readTimeout: prm.readTimeout, writeTimeout: prm.writeTimeout,
-		loginTimeout: prm.loginTimeout, res: &Result{lastError: nil}}
+		loginTimeout: prm.loginTimeout, interpolateParams: prm.interpolateParams,
+		res: &Result{lastError: nil}}
 
 	// init resultset, buffer, parameters, message cache...
 	s.res.s = s
@@ -506,7 +511,14 @@ func (s *session) Ping(ctx context.Context) error {
 // The aim is to use language queries when no parameters are given
 func (s *session) Query(query string, args []driver.Value) (driver.Rows, error) {
 	if len(args) != 0 {
-		return nil, driver.ErrSkip
+		if !s.interpolateParams {
+			return nil, driver.ErrSkip
+		}
+		interpolated, err := interpolate(query, args)
+		if err != nil {
+			return nil, err
+		}
+		return s.simpleQuery(nil, interpolated)
 	}
 	return s.simpleQuery(nil, query)
 }
@@ -515,7 +527,14 @@ func (s *session) Query(query string, args []driver.Value) (driver.Rows, error) 
 func (s *session) QueryContext(ctx context.Context, query string,
 	namedArgs []driver.NamedValue) (driver.Rows, error) {
 	if len(namedArgs) != 0 {
-		return nil, driver.ErrSkip
+		if !s.interpolateParams {
+			return nil, driver.ErrSkip
+		}
+		interpolated, err := interpolateNamed(query, namedArgs)
+		if err != nil {
+			return nil, err
+		}
+		return s.simpleQuery(ctx, interpolated)
 	}
 	return s.simpleQuery(ctx, query)
 }
@@ -539,7 +558,14 @@ func (s *session) simpleQuery(ctx context.Context, query string) (rows *Rows, er
 // The aim is to use language queries when no parameters are given
 func (s *session) Exec(query string, args []driver.Value) (driver.Result, error) {
 	if len(args) != 0 {
-		return &emptyResult, driver.ErrSkip
+		if !s.interpolateParams {
+			return &emptyResult, driver.ErrSkip
+		}
+		interpolated, err := interpolate(query, args)
+		if err != nil {
+			return &emptyResult, err
+		}
+		return s.simpleExec(nil, interpolated)
 	}
 
 	return s.simpleExec(nil, query)
@@ -549,7 +575,14 @@ func (s *session) Exec(query string, args []driver.Value) (driver.Result, error)
 func (s *session) ExecContext(ctx context.Context, query string,
 	namedArgs []driver.NamedValue) (driver.Result, error) {
 	if len(namedArgs) != 0 {
-		return &emptyResult, driver.ErrSkip
+		if !s.interpolateParams {
+			return &emptyResult, driver.ErrSkip
+		}
+		interpolated, err := interpolateNamed(query, namedArgs)
+		if err != nil {
+			return &emptyResult, err
+		}
+		return s.simpleExec(ctx, interpolated)
 	}
 
 	return s.simpleExec(ctx, query)
