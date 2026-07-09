@@ -70,6 +70,12 @@ Less frequently used ones:
 
  - ssl - Whether or not to use SSL. The default is not to use ssl.
    Set to "on" if the server is setup to use ssl.
+ - sslrootcert - PEM-encoded CA certificate used to verify the server's
+   certificate chain. Only used when ssl is "on". When omitted the connection
+   is not verified (backwards-compatible default).
+ - sslservername - Expected server name for hostname verification. When set
+   together with sslrootcert both the chain and the hostname are verified
+   (verify-full); when omitted only the chain is verified (verify-ca).
  - encryptPassword - Can be "yes" to require password encryption,
    "no" to disable it, and "try" to try encrytping password an falling back
    to plain text password. Password encryption works on Sybase ASE 15.5
