@@ -20,9 +20,9 @@ func interpolateNamed(query string, namedArgs []driver.NamedValue) (string, erro
 
 // interpolate replaces positional "?" placeholders in query with the escaped SQL-literal
 // form of each arg, so the statement can be sent as a plain language request. Placeholders
-// inside single-quoted string literals, double-quoted identifiers, and comments
-// (-- to end of line, and /* ... */) are left untouched. It returns an error if the number
-// of placeholders does not match len(args).
+// inside single-quoted string literals, double-quoted identifiers, bracketed identifiers
+// ([...]), and comments (-- to end of line, and /* ... */) are left untouched. It returns
+// an error if the number of placeholders does not match len(args).
 //
 // This is the opt-in alternative (interpolateParams DSN option) to the ASE dynamic-SQL
 // prepared-statement protocol, which hangs on servers that do not implement it such as
@@ -47,6 +47,24 @@ func interpolate(query string, args []driver.Value) (string, error) {
 				b.WriteByte(query[i])
 				if query[i] == quote {
 					if i+1 < n && query[i+1] == quote {
+						b.WriteByte(query[i+1])
+						i += 2
+						continue
+					}
+					i++
+					break
+				}
+				i++
+			}
+		case '[':
+			// Bracketed identifier [ident] (T-SQL / SQL Anywhere compatibility). A doubled
+			// ]] is an escaped ] and does not close the identifier.
+			b.WriteByte(c)
+			i++
+			for i < n {
+				b.WriteByte(query[i])
+				if query[i] == ']' {
+					if i+1 < n && query[i+1] == ']' {
 						b.WriteByte(query[i+1])
 						i += 2
 						continue

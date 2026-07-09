@@ -63,6 +63,18 @@ func TestInterpolate(t *testing.T) {
 			want:  "SELECT 0x00abff",
 		},
 		{
+			name:  "placeholder_inside_bracket_identifier_is_ignored",
+			query: "SELECT [weird?col] FROM t WHERE x = ?",
+			args:  []driver.Value{"v"},
+			want:  "SELECT [weird?col] FROM t WHERE x = 'v'",
+		},
+		{
+			name:  "doubled_bracket_stays_in_identifier",
+			query: "SELECT [a]]?b] , ?",
+			args:  []driver.Value{"x"},
+			want:  "SELECT [a]]?b] , 'x'",
+		},
+		{
 			name:    "too_few_args_errors",
 			query:   "SELECT ?, ?",
 			args:    []driver.Value{int64(1)},
